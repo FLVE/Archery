@@ -1,6 +1,7 @@
 import json
 from datetime import timedelta, datetime
 from unittest.mock import MagicMock, patch, Mock, ANY
+from pytest_mock import MockerFixture
 
 import sqlparse
 from django.contrib.auth import get_user_model
@@ -17,7 +18,14 @@ from sql.engines.oracle import OracleEngine
 from sql.engines.mongo import MongoEngine
 from sql.engines.clickhouse import ClickHouseEngine
 from sql.engines.odps import ODPSEngine
-from sql.models import DataMaskingColumns, Instance, SqlWorkflow, SqlWorkflowContent
+from sql.models import (
+    DataMaskingColumns,
+    Instance,
+    SqlWorkflow,
+    SqlWorkflowContent,
+    Tunnel,
+)
+
 
 User = get_user_model()
 
@@ -397,6 +405,33 @@ class TestRedis(TestCase):
         # 验证config_get和info方法的调用
         mock_config_get.assert_called_once_with("databases")
         mock_info.assert_called_once_with("Keyspace")
+
+    @patch(
+        "redis.Redis.scan_iter", return_value=["table1", "table2", "table3", "table4"]
+    )
+    def test_get_all_tables_success(self, _scan_iter):
+        # 创建 RedisEngine 实例
+        new_engine = RedisEngine(instance=self.ins)
+
+        # 调用 get_all_tables 方法
+        db_name = "4"
+        result = new_engine.get_all_tables(db_name)
+        mask_result_rows = ["table1", "table2", "table3", "table4"]
+        # 验证返回的表格信息
+        self.assertEqual(result.rows, mask_result_rows)
+
+    @patch("redis.Redis.scan_iter", side_effect=Exception("Test Exception"))
+    def test_get_all_tables_exception(self, _scan_iter):
+        # 创建 RedisEngine 实例
+        new_engine = RedisEngine(instance=self.ins)
+
+        # 调用 get_all_tables 方法并模拟异常
+        db_name = "4"
+        result = new_engine.get_all_tables(db_name)
+
+        # 验证返回的异常信息
+        self.assertEqual(result.rows, [])
+        self.assertIn(result.message, "Test Exception")
 
     def test_query_check_safe_cmd(self):
         safe_cmd = "keys 1*"
@@ -1652,6 +1687,74 @@ end;"""
         r = new_engine.lock_info()
         self.assertIsInstance(r, ResultSet)
 
+    @patch("sql.engines.oracle.OracleEngine.query")
+    def test_get_table_desc_data(self, _query):
+        """测试获取表格字段信息方法"""
+        new_engine = OracleEngine(instance=self.ins)
+
+        # 模拟查询返回结果
+        mock_result = ResultSet()
+        mock_result.column_list = [
+            "列名",
+            "列注释",
+            "字段类型",
+            "字段默认值",
+            "是否为空",
+            "所属索引",
+            "约束类型",
+        ]
+        mock_result.rows = [
+            ("ID", "主键ID", "NUMBER(10)", "1", " NOT NULL", "PK_USER", "P")
+        ]
+        _query.return_value = mock_result
+
+        # 调用被测试方法
+        result = new_engine.get_table_desc_data(db_name="TEST_SCHEMA", tb_name="USERS")
+
+        # 验证结果结构
+        self.assertIsInstance(result, dict)
+        self.assertIn("column_list", result)
+        self.assertIn("rows", result)
+        self.assertIsInstance(result["column_list"], list)
+        self.assertIsInstance(result["rows"], list)
+
+        # 验证query方法被正确调用
+        _query.assert_called_once()
+
+    @patch("sql.engines.oracle.OracleEngine.query")
+    def test_get_table_index_data(self, _query):
+        """测试获取表格索引信息方法"""
+        new_engine = OracleEngine(instance=self.ins)
+
+        # 模拟查询返回结果
+        mock_result = ResultSet()
+        mock_result.column_list = [
+            "索引名称",
+            "唯一性",
+            "索引类型",
+            "压缩属性",
+            "表空间",
+            "状态",
+            "分区",
+        ]
+        mock_result.rows = [
+            ("PK_USERS", "UNIQUE", "NORMAL", "DISABLED", "USERS_TBS", "VALID", "NO")
+        ]
+        _query.return_value = mock_result
+
+        # 调用被测试方法
+        result = new_engine.get_table_index_data(db_name="TEST_SCHEMA", tb_name="USERS")
+
+        # 验证结果结构
+        self.assertIsInstance(result, dict)
+        self.assertIn("column_list", result)
+        self.assertIn("rows", result)
+        self.assertIsInstance(result["column_list"], list)
+        self.assertIsInstance(result["rows"], list)
+
+        # 验证query方法被正确调用
+        _query.assert_called_once()
+
 
 class MongoTest(TestCase):
     def setUp(self) -> None:
@@ -2474,3 +2577,22 @@ class ODPSTest(TestCase):
         self.assertEqual(
             result.column_list, ["COLUMN_NAME", "COLUMN_TYPE", "COLUMN_COMMENT"]
         )
+
+
+def test_ssh(db_instance, mocker: MockerFixture):
+    tunnel = Tunnel.objects.create(tunnel_name="test", host="test", port=22)
+    db_instance.tunnel = tunnel
+    db_instance.save()
+
+    class FakeTunnel:
+        def get_ssh(self):
+            return "remote_host", "remote_password"
+
+    mocker.patch("sql.engines.SSHConnection", return_value=FakeTunnel())
+    from sql.engines import EngineBase
+
+    engine = EngineBase(instance=db_instance)
+    remote_host, remote_password, _, _ = engine.remote_instance_conn(
+        instance=engine.instance
+    )
+    assert (remote_host, remote_password) == ("remote_host", "remote_password")
