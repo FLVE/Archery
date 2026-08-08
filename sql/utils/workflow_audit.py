@@ -71,6 +71,9 @@ class ReviewInfo:
         """
         steps = []
         for index, n in enumerate(self.nodes):
+            if not n.group:
+                steps.append("系统自动通过")
+                continue
             if n.is_current_node:
                 self.current_node_index = index
                 steps.append(f"{n.group.name}(current)")
@@ -79,7 +82,7 @@ class ReviewInfo:
                 steps.append(f"{n.group.name}(passed)")
                 continue
             steps.append(n.group.name)
-        return " -> ".join(steps)
+        return " -> ".join(steps) if steps else "系统自动通过"
 
     @property
     def current_node(self) -> ReviewNode:
@@ -423,7 +426,7 @@ class AuditV2:
             if not actor.has_perm(need_user_permission):
                 raise AuditException("用户无相关审批权限, 请合理配置权限")
 
-            # 确认权限, 是否在当前审核组内
+            # 确认权限, 是否在当前权限组内
             try:
                 audit_auth_group = Group.objects.get(id=self.audit.current_audit)
             except Group.DoesNotExist:
@@ -431,7 +434,9 @@ class AuditV2:
                     "当前审批权限组不存在, 请联系管理员检查并清洗错误数据"
                 )
             if not auth_group_users([audit_auth_group.name], self.resource_group_id):
-                raise AuditException("用户不在当前审批审批节点的用户组内, 无权限审核")
+                raise AuditException("用户不在流程相关资源组内, 无权限审核")
+            if not actor.groups.filter(id=self.audit.current_audit).exists():
+                raise AuditException("用户不在当前节点的审核组内, 无权限审核")
             return True
         if action in [
             WorkflowAction.EXECUTE_START,
@@ -504,7 +509,11 @@ class AuditV2:
         if self.audit.current_audit == "-1":
             operation_info = f"审批备注: {remark}, 无下级审批"
         else:
-            operation_info = f"审批备注：{remark}, 下级审批：{self.audit.current_audit}"
+            try:
+                next_group_name = Group.objects.get(id=self.audit.current_audit).name
+            except Group.DoesNotExist:
+                next_group_name = self.audit.current_audit
+            operation_info = f"审批备注：{remark}, 下级审批：{next_group_name}"
 
         # 增加工单日志
         WorkflowLog.objects.create(

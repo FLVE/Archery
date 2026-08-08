@@ -5,6 +5,7 @@ import traceback
 
 import simplejson as json
 from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q
@@ -30,7 +31,7 @@ from sql.utils.sql_review import (
 )
 from sql.utils.tasks import add_sql_schedule, del_schedule
 from sql.utils.workflow_audit import Audit, get_auditor, AuditException
-from .models import SqlWorkflow
+from .models import SqlWorkflow, WorkflowAudit
 
 logger = logging.getLogger("default")
 

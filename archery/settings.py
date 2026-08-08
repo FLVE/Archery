@@ -38,6 +38,10 @@ env = environ.Env(
         dict,
         {"username": "cn", "display": "displayname", "email": "mail"},
     ),
+    OIDC_USER_ATTR_MAP=(
+        dict,
+        {"username": "preferred_username", "display": "name", "email": "email"},
+    ),
     Q_CLUISTER_SYNC=(bool, False),  # qcluster 同步模式, debug 时可以调整为 True
     # CSRF_TRUSTED_ORIGINS=subdomain.example.com,subdomain.example2.com subdomain.example.com
     CSRF_TRUSTED_ORIGINS=(list, []),
@@ -59,6 +63,7 @@ env = environ.Env(
             "elasticsearch",
             "opensearch",
             "memcached",
+            "tdengine",
         ],
     ),
     ENABLED_NOTIFIERS=(
@@ -111,6 +116,7 @@ AVAILABLE_ENGINES = {
     "elasticsearch": {"path": "sql.engines.elasticsearch:ElasticsearchEngine"},
     "opensearch": {"path": "sql.engines.elasticsearch:OpenSearchEngine"},
     "memcached": {"path": "sql.engines.memcached:MemcachedEngine"},
+    "tdengine": {"path": "sql.engines.tdengine:TDengineEngine"},
 }
 
 ENABLED_NOTIFIERS = env("ENABLED_NOTIFIERS")
@@ -275,7 +281,7 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ),
     # 权限
-    "DEFAULT_PERMISSION_CLASSES": ("sql_api.permissions.IsInUserWhitelist",),
+    "DEFAULT_PERMISSION_CLASSES": ("sql_api.permissions.IsApiSystemAdmin",),
     # 限速（anon：未认证用户  user：认证用户）
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
@@ -309,6 +315,7 @@ SIMPLE_JWT = {
 ENABLE_OIDC = env("ENABLE_OIDC", False)
 if ENABLE_OIDC:
     INSTALLED_APPS += ("mozilla_django_oidc",)
+    OIDC_USER_ATTR_MAP = env("OIDC_USER_ATTR_MAP")
     AUTHENTICATION_BACKENDS = (
         "common.authenticate.oidc_auth.OIDCAuthenticationBackend",
         "django.contrib.auth.backends.ModelBackend",

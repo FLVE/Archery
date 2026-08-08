@@ -12,7 +12,6 @@ from mirage.crypto import Crypto
 
 from common.utils.const import WorkflowStatus, WorkflowType, WorkflowAction
 
-
 logger = logging.getLogger("default")
 file, _class = settings.PASSWORD_MIXIN_PATH.split(":")
 
@@ -156,6 +155,7 @@ DB_TYPE_CHOICES = (
     ("elasticsearch", "Elasticsearch"),
     ("opensearch", "OpenSearch"),
     ("memcached", "Memcached"),
+    ("tdengine", "TDengine"),
 )
 
 
@@ -605,7 +605,9 @@ class QueryPrivileges(models.Model):
     class Meta:
         managed = True
         db_table = "query_privileges"
-        index_together = ["user_name", "instance", "db_name", "valid_date"]
+        indexes = [
+            models.Index(fields=["user_name", "instance", "db_name", "table_name"]),
+        ]
         verbose_name = "查询权限记录"
         verbose_name_plural = "查询权限记录"
 
@@ -1003,6 +1005,7 @@ class Permission(models.Model):
             ("menu_database", "菜单 数据库管理"),
             ("menu_instance_account", "菜单 实例账号管理"),
             ("menu_param", "菜单 参数配置"),
+            ("menu_param_compare", "菜单 参数对比"),
             ("menu_data_dictionary", "菜单 数据字典"),
             ("menu_tools", "菜单 工具插件"),
             ("menu_archive", "菜单 数据归档"),
@@ -1312,9 +1315,67 @@ class SlowQueryHistory(models.Model):
         managed = False
         db_table = "mysql_slow_query_review_history"
         unique_together = ("checksum", "ts_min", "ts_max")
-        index_together = ("hostname_max", "ts_min")
+        indexes = [
+            models.Index(fields=["hostname_max", "ts_min"]),
+        ]
         verbose_name = "慢日志明细"
         verbose_name_plural = "慢日志明细"
+
+
+class RedisSlowQuery(models.Model):
+    """
+    Redis慢日志统计
+    """
+
+    checksum = models.CharField(max_length=32, primary_key=True)
+    fingerprint = models.TextField()
+    sample = models.TextField()
+    first_seen = models.DateTimeField(blank=True, null=True)
+    last_seen = models.DateTimeField(blank=True, null=True, db_index=True)
+
+    class Meta:
+        managed = False
+        db_table = "redis_slow_query_review"
+        verbose_name = "Redis慢日志统计"
+        verbose_name_plural = "Redis慢日志统计"
+
+
+class RedisSlowQueryHistory(models.Model):
+    """
+    Redis慢日志明细
+    """
+
+    id = models.AutoField(primary_key=True)
+    checksum = models.ForeignKey(
+        RedisSlowQuery,
+        db_constraint=False,
+        to_field="checksum",
+        db_column="checksum",
+        on_delete=models.CASCADE,
+    )
+    sample = models.TextField()
+    hostname = models.CharField(max_length=64)
+    ts_min = models.DateTimeField(db_index=True)
+    ts_max = models.DateTimeField()
+    cnt = models.IntegerField(default=0)
+    duration_sum = models.BigIntegerField(blank=True, null=True)
+    duration_min = models.BigIntegerField(blank=True, null=True)
+    duration_max = models.BigIntegerField(blank=True, null=True)
+    duration_pct_95 = models.BigIntegerField(blank=True, null=True)
+    duration_stddev = models.DecimalField(
+        max_digits=20, decimal_places=4, blank=True, null=True
+    )
+    duration_median = models.BigIntegerField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "redis_slow_query_review_history"
+        unique_together = ("checksum", "hostname", "ts_min", "ts_max")
+        indexes = [
+            models.Index(fields=["hostname", "ts_min"]),
+        ]
+        verbose_name = "Redis慢日志明细"
+        verbose_name_plural = "Redis慢日志明细"
 
 
 class AuditEntry(models.Model):

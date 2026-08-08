@@ -41,9 +41,7 @@ class ChartDao(object):
           count(*)
         from sql_workflow 
         where create_time >= '{}' and create_time <= '{}'
-        group by syntax_type;""".format(
-            start_date, end_date
-        )
+        group by syntax_type;""".format(start_date, end_date)
         return self.__query(sql)
 
     # 工单数量统计
@@ -55,9 +53,7 @@ class ChartDao(object):
         from sql_workflow
         where create_time >= '{}' and create_time <= '{}'
         group by date_format(create_time, '%Y-%m-%d')
-        order by 1 asc;""".format(
-            start_date, end_date
-        )
+        order by 1 asc;""".format(start_date, end_date)
         return self.__query(sql)
 
     # 工单按组统计
@@ -69,9 +65,7 @@ class ChartDao(object):
         from sql_workflow
         where create_time >= '{}' and create_time <= '{}'
         group by group_id
-        order by count(*) desc;""".format(
-            start_date, end_date
-        )
+        order by count(*) desc;""".format(start_date, end_date)
         return self.__query(sql)
 
     def workflow_by_user(self, start_date, end_date):
@@ -84,9 +78,7 @@ class ChartDao(object):
         from sql_workflow
         where create_time >= '{}' and create_time <= '{}'
         group by engineer_display
-        order by count(*) desc;""".format(
-            start_date, end_date
-        )
+        order by count(*) desc;""".format(start_date, end_date)
         return self.__query(sql)
 
     # SQL查询统计(每日检索行数)
@@ -98,9 +90,7 @@ class ChartDao(object):
         from query_log
         where create_time >= '{}' and create_time <= '{}'
         group by date_format(create_time, '%Y-%m-%d')
-        order by sum(effect_row) desc;""".format(
-            start_date, end_date
-        )
+        order by sum(effect_row) desc;""".format(start_date, end_date)
         return self.__query(sql)
 
     # SQL查询统计(每日检索次数)
@@ -112,9 +102,7 @@ class ChartDao(object):
         from query_log
         where create_time >= '{}' and create_time <= '{}'
         group by date_format(create_time, '%Y-%m-%d')
-        order by count(*) desc;""".format(
-            start_date, end_date
-        )
+        order by count(*) desc;""".format(start_date, end_date)
         return self.__query(sql)
 
     # SQL查询统计(用户检索行数)
@@ -127,9 +115,7 @@ class ChartDao(object):
         where create_time >= '{}' and create_time <= '{}'
         group by user_display
         order by sum(effect_row) desc
-        limit 20;""".format(
-            start_date, end_date
-        )
+        limit 20;""".format(start_date, end_date)
         return self.__query(sql)
 
     # SQL查询统计(DB检索行数)
@@ -142,9 +128,7 @@ class ChartDao(object):
         where create_time >= '{}' and create_time <= '{}'
         group by db_name
         order by sum(effect_row) desc
-        limit 20;""".format(
-            start_date, end_date
-        )
+        limit 20;""".format(start_date, end_date)
         return self.__query(sql)
 
     # 慢日志历史趋势图(按次数)
@@ -157,38 +141,56 @@ group by date(date_add(ts_min, interval 8 HOUR));"""
 
     # 慢日志历史趋势图(按时长)
     def slow_query_review_history_by_pct_95_time(self, checksum):
-        sql = f"""select truncate(Query_time_pct_95,6),date(date_add(ts_min, interval 8 HOUR))
+        sql = f"""select truncate(MAX(Query_time_pct_95),6),date(date_add(ts_min, interval 8 HOUR))
 from mysql_slow_query_review_history
 where checksum = '{checksum}'
 group by date(date_add(ts_min, interval 8 HOUR));"""
         return self.__query(sql)
 
+    # Redis慢日志历史趋势图(按次数)
+    def redis_slow_query_review_history_by_cnt(self, checksum, hostnames):
+        hostname_list = "','".join(hostnames)
+        sql = f"""select sum(cnt),date(ts_min)
+from redis_slow_query_review_history
+where checksum = '{checksum}'
+and hostname in ('{hostname_list}')
+group by date(ts_min);"""
+        return self.__query(sql)
+
+    # Redis慢日志历史趋势图(按时长)
+    def redis_slow_query_review_history_by_pct_95_time(self, checksum, hostnames):
+        hostname_list = "','".join(hostnames)
+        sql = f"""select truncate(MAX(duration_pct_95),6),date(ts_min)
+from redis_slow_query_review_history
+where checksum = '{checksum}'
+and hostname in ('{hostname_list}')
+group by date(ts_min);"""
+        return self.__query(sql)
+
     # 慢日志db/user维度统计
-    def slow_query_count_by_db_by_user(self, start_date, end_date):
+    def slow_query_count_by_db_by_user(self):
         sql = """
         select
             concat(db_max,' user: ' ,user_max),
             sum(ts_cnt) 
         from mysql_slow_query_review_history 
-        where ts_min >= '{}' and ts_min <= '{}'
+        where ts_min >= date_sub(now(),INTERVAL 24 hour)
+        and db_max is not null
         group by db_max,user_max order by sum(ts_cnt) desc limit 50;
-        """.format(
-            start_date, end_date
-        )
+        """
         return self.__query(sql)
 
     # 慢日志db维度统计
-    def slow_query_count_by_db(self, start_date, end_date):
+    def slow_query_count_by_db(self):
         sql = """
         select
             db_max,
             sum(ts_cnt) 
         from mysql_slow_query_review_history 
-        where ts_min >= '{}' and ts_min <= '{}'
+        where ts_min >= date_sub(now(),INTERVAL 24 hour)
+        and db_max is not null
         group by db_max order by sum(ts_cnt) desc limit 50;
-        """.format(
-            start_date, end_date
-        )
+        """
         return self.__query(sql)
 
     # 数据库实例类型统计
@@ -228,9 +230,7 @@ group by date(date_add(ts_min, interval 8 HOUR));"""
                 WHERE a.create_time >= '{}' and a.create_time <= '{}'
                 GROUP BY a.STATUS
                 ORDER BY 1;
-          """.format(
-            start_date, end_date
-        )
+          """.format(start_date, end_date)
         return self.__query(sql)
 
     def query_instance_env_info(self):

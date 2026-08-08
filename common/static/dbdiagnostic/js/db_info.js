@@ -1,3 +1,27 @@
+function truncateText(value, maxLength) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    value = String(value);
+    if (value.length > maxLength) {
+        return value.substr(0, maxLength) + '...';
+    }
+    return value;
+}
+
+function formatSqlText(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    var sql = window.sqlFormatter.format(String(value));
+    //替换所有的换行符
+    sql = sql.replace(/\r\n/g, "<br>");
+    sql = sql.replace(/\n/g, "<br>");
+    //替换所有的空格
+    sql = sql.replace(/\s/g, "&nbsp;");
+    return sql;
+}
+
 const pgsqlDiagnosticInfo = {
     fieldsProcesslist: [
         'pgsql',
@@ -72,12 +96,7 @@ const mysqlDiagnosticInfo = {
             field: 'info',
             sortable: true,
             formatter: function (value, row, index) {
-                if (value.length > 20) {
-                    var sql = value.substr(0, 20) + '...';
-                    return sql;
-                } else {
-                    return value
-                }
+                return truncateText(value, 30);
             }
         }, {
             title: '完整INFO',
@@ -89,13 +108,7 @@ const mysqlDiagnosticInfo = {
             var html = [];
             $.each(row, function (key, value) {
                 if (key === 'info') {
-                    var sql = window.sqlFormatter.format(value);
-                    //替换所有的换行符
-                    sql = sql.replace(/\r\n/g, "<br>");
-                    sql = sql.replace(/\n/g, "<br>");
-                    //替换所有的空格
-                    sql = sql.replace(/\s/g, "&nbsp;");
-                    html.push('<span>' + sql + '</span>');
+                    html.push('<span>' + formatSqlText(value) + '</span>');
                 }
             });
             return html.join('');
@@ -148,12 +161,7 @@ const dorisDiagnosticInfo = {
             field: 'info',
             sortable: true,
             formatter: function (value, row, index) {
-                if (value.length > 20) {
-                    var sql = value.substr(0, 20) + '...';
-                    return sql;
-                } else {
-                    return value
-                }
+                return truncateText(value, 20);
             }
         }, {
             title: 'QUERYID',
@@ -175,13 +183,7 @@ const dorisDiagnosticInfo = {
             var html = [];
             $.each(row, function (key, value) {
                 if (key === 'info') {
-                    var sql = window.sqlFormatter.format(value);
-                    //替换所有的换行符
-                    sql = sql.replace(/\r\n/g, "<br>");
-                    sql = sql.replace(/\n/g, "<br>");
-                    //替换所有的空格
-                    sql = sql.replace(/\s/g, "&nbsp;");
-                    html.push('<span>' + sql + '</span>');
+                    html.push('<span>' + formatSqlText(value) + '</span>');
                 }
             });
             return html.join('');
@@ -267,11 +269,7 @@ const mongoDiagnosticInfo = {
             formatter: function (value, row, index) {
                 if (value) {
                     let c = JSON.stringify(value);
-                    if (c.length > 20) {
-                        return c.substr(0, 80) + '...}';
-                    } else {
-                        return c;
-                    }
+                    return truncateText(c, 80);
                 }
             }
         }, {
@@ -405,6 +403,7 @@ const redisDiagnosticInfo = {
         }
     ],
 }
+
 const oracleDiagnosticInfo = {
     fieldsProcesslist: [
         'oracle',
@@ -438,12 +437,7 @@ const oracleDiagnosticInfo = {
             field: 'SQL_TEXT',
             sortable: true,
             formatter: function (value, row, index) {
-                if (row.SQL_TEXT.length > 60) {
-                    let sql = row.SQL_TEXT.substr(0, 60) + '...';
-                    return sql;
-                } else {
-                    return value
-                }
+                return truncateText(value, 60);
             }
         }, {
             title: 'FULL SQL',
@@ -459,13 +453,172 @@ const oracleDiagnosticInfo = {
             var html = [];
             $.each(row, function (key, value) {
                 if (key === 'SQL_FULLTEXT') {
-                    var sql = window.sqlFormatter.format(value);
-                    //替换所有的换行符
-                    sql = sql.replace(/\r\n/g, "<br>");
-                    sql = sql.replace(/\n/g, "<br>");
-                    //替换所有的空格
-                    sql = sql.replace(/\s/g, "&nbsp;");
-                    html.push('<span>' + sql + '</span>');
+                    html.push('<span>' + formatSqlText(value) + '</span>');
+                }
+            });
+            return html.join('');
+        }
+    ],
+}
+
+const tdengineDiagnosticInfo = {
+    fieldsProcesslist: [
+        'tdengine',
+        ["All"],
+        [{
+            title: '',
+            field: 'checkbox',
+            checkbox: true
+        }, {
+            title: 'Kill ID',
+            field: 'kill_id',
+        }, {
+            title: 'Query ID',
+            field: 'query_id',
+        }, {
+            title: 'Conn ID',
+            field: 'conn_id',
+        }, {
+            title: 'Sub Status',
+            field: 'sub_status',
+            sortable: true,
+            formatter: function (value, row, index) {
+                return truncateText(value, 50);
+            }
+        }, {
+            title: 'App',
+            field: 'app',
+            sortable: true
+        }, {
+            title: 'PID',
+            field: 'pid',
+            visible: false
+        }, {
+            title: 'User',
+            field: 'user',
+            sortable: true
+        }, {
+            title: 'End Point',
+            field: 'end_point',
+            sortable: true
+        }, {
+            title: 'Exec Sec',
+            field: 'exec_usec',
+            sortable: true,
+            formatter: function (value, row, index) {
+                return (value / 1000000).toFixed(3);
+            }
+        }, {
+            title: 'Stable Query',
+            field: 'stable_query',
+            visible: false
+        }, {
+            title: 'Sub Query',
+            field: 'sub_query',
+            visible: false
+        }, {
+            title: 'Sub Num',
+            field: 'sub_num',
+            visible: false
+        }, {
+            title: 'SQL',
+            field: 'sql',
+            sortable: true,
+            formatter: function (value, row, index) {
+                return truncateText(value, 60);
+            }
+        }, {
+            title: 'FULL SQL',
+            field: 'sql',
+            visible: false,
+            sortable: true
+        }, {
+            title: 'Create Time',
+            field: 'create_time',
+            sortable: true
+        }, {
+            title: 'User App',
+            field: 'user_app',
+            visible: false
+        }, {
+            title: 'User IP',
+            field: 'user_ip',
+            sortable: true
+        }],
+        function (index, row) {
+            var html = [];
+            $.each(row, function (key, value) {
+                if (key === 'sql') {
+                    html.push('<span>' + formatSqlText(value) + '</span>');
+                }
+            });
+            return html.join('');
+        }
+    ],
+}
+
+const clickhouseDiagnosticInfo = {
+    fieldsProcesslist: [
+        'clickhouse',
+        ["All"],
+        [{
+            title: '',
+            field: 'checkbox',
+            checkbox: true
+        }, {
+            title: '查询ID',
+            field: 'query_id',
+            sortable: false
+        }, {
+            title: '用户',
+            field: 'user',
+            sortable: true
+        }, {
+            title: 'IP',
+            field: 'ip',
+            sortable: true
+        }, {
+            title: '端口',
+            field: 'port',
+            sortable: false
+        }, {
+            title: '库名',
+            field: 'current_database',
+            sortable: true
+        }, {
+            title: '耗时(秒)',
+            field: 'time',
+            sortable: true
+        }, {
+            title: '总行数(预估)',
+            field: 'total_rows_approx',
+            sortable: true
+        }, {
+            title: '分配内存',
+            field: 'memory',
+            sortable: true
+        }, {
+            title: '类型',
+            field: 'query_kind',
+            sortable: true
+        }, {
+            title: '语句',
+            field: 'query',
+            sortable: true,
+            formatter: function (value, row, index) {
+                return truncateText(value, 30);
+            }
+        }, {
+            title: '完整语句',
+            field: 'query',
+            sortable: false,
+            visible: false // 默认不显示
+        }],
+        function (index, row) {
+            var html = [];
+            $.each(row, function (key, value) {
+                if (key === 'query') {
+                    html.push('<span>' + formatSqlText(value) + '</span>');
                 }
             });
             return html.join('');
